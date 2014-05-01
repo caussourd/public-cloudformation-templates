@@ -10,7 +10,7 @@ This template has been created based on my needs and has to be customized for yo
 The elements I recommend to change are identified by these symbols: << >> in the template.
 The template won't work if you leave these symbols.  
 
-### What this template do
+### What this template does
 
 It creates an AWS environment ready for a Drupal or Symfony project with a database hosted on AWS RDS.  
 
