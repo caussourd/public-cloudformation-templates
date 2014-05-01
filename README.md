@@ -1,16 +1,15 @@
-Symfony_or_Drupal_Instance_with_optional_RDS_instance.template
-==============================================================
+## Symfony_or_Drupal_Instance_with_optional_RDS_instance.template
 
 To automate the creation of AWS resources for Symfony or Drupal websites
 
-## IMPORTANT INFORMATION
+### IMPORTANT INFORMATION
 
 This template creates an Amazon EC2 instance and an Amazon RDS DB instance. You will be billed for the AWS resources used if you create a stack from this template.
 
 This template has been created based on my needs and has to be customized for your usage. 
 The elements I recommend to change are identified by these symbols: << >> in the template. 
 
-## What this template do
+### What this template do
 
 It creates an AWS environment ready for a Drupal or Symfony project with a database hosted on AWS RDS.  
 
@@ -56,7 +55,7 @@ It creates these resources:
 	The CIDR (parameter ExternalIP) is authorized
 
 
-## What this template doesn't do
+### What this template doesn't do
 
 - It doesn't install a database server on the EC2 instance 
 
