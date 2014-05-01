@@ -1,0 +1,469 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "LAMP template originally based on AWS CloudFormation Sample Template LAMP_Single_Instance_With_RDS: Create a LAMP stack using a single EC2 instance for the web server and an Amazon RDS database instance for the backend data store (optional). It also creates Cloudwatch alarms for the instance(s). Note that NO app or DB are installed. **WARNING** This template creates an Amazon EC2 instance and an Amazon RDS DB instance. You will be billed for the AWS resources used if you create a stack from this template.",
+  
+  "Parameters" : {
+
+    "RDS" : {
+      "Description" : "Do you want to create a RDS instance?",
+      "Default" : "yes",
+      "Type" : "String"
+    },
+
+    "RDSrootPassword" : {
+      "Description" : "root password for the root MySQL account on the RDS instance (ONLY IF RDS = yes)",
+      "NoEcho" : "true",
+      "Type" : "String",
+      "AllowedPattern" : "[a-zA-Z0-9]*",
+      "ConstraintDescription" : "must contain only alphanumeric characters"
+    },
+
+    "InstanceType" : {
+      "Description" : "WebServer EC2 instance type",
+      "Type" : "String",
+      "Default" : "m1.small",
+      "AllowedValues" : [ "t1.micro","m1.small","m3.medium","m3.large","m3.xlarge", "m3.2xlarge", "c3.large","c3.xlarge","c3.2xlarge","r3.large","r3.xlarge", "r3.2xlarge"],
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+
+    "AWSRegionAMI" : {
+      "Description" : "AMI - By default: Amazon Linux AMI 2014.04 64-bit",
+      "Type" : "String",
+      "Default"      : "<<ami-2918e35e>>",
+      "AllowedPattern" : "[a-z0-9-]*"
+    },
+
+    "KeyName" : {
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+      "Type" : "String",
+      "Default" : "<<your_key_pair_name>>",
+      "MinLength": "1",
+      "MaxLength": "64",
+      "AllowedPattern" : "[-_ a-zA-Z0-9]*",
+      "ConstraintDescription" : "can contain only alphanumeric characters, spaces, dashes and underscores."
+    },
+
+    "ExternalIP" : {
+      "Description" : "The IP address range that can be used to SSH to the EC2 instances and access the RDS DB instance (if created)",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "<<XX.XX.XX.XX/32>>",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+
+    "ProjectType" : {
+      "Description" : "Project type - Example: drupal / symfony",
+      "Type" : "String", 
+      "Default" : "symfony",
+      "AllowedValues" : ["drupal", "symfony"],
+      "ConstraintDescription" : "valid values : drupal, symfony"
+    },
+
+    "ServerName" : {
+      "Description" : "Hostname to access website - Example: www.menss.co.uk",
+      "Type" : "String" 
+    },
+
+    "InstanceTagName" : {
+      "Description" : "Instance Name tag - Example: LIU-cache",
+      "Type" : "String" 
+    },
+
+    "InstanceTagProject" : {
+      "Description" : "Instance Project tag - Example: LIU",
+      "Type" : "String" 
+    },
+
+    "InstanceTagEnv" : {
+      "Description" : "Instance Env tag - Example: live / staging",
+      "Type" : "String",
+      "Default" : "<<live>>",
+      "AllowedValues" : [<<"live", "staging", "">>],
+      "ConstraintDescription" : "valid values : live, staging" 
+    },
+
+    "InstanceTagMonthlyBackup" : {
+      "Description" : "Instance monthly_backup tag",
+      "Type" : "String",
+      "Default" : "yes",
+      "AllowedValues" : ["yes", "no"],
+      "ConstraintDescription" : "valid values : yes, no"
+    },
+
+    "InstanceTagDailyBackup" : {
+      "Description" : "Instance daily_backup tag",
+      "Type" : "String",
+      "Default" : "no",
+      "AllowedValues" : ["yes", "no"],
+      "ConstraintDescription" : "valid values : yes, no"
+    }
+
+  },
+
+  "Conditions" : {
+    "CreateRDSInstance" : {"Fn::Equals" : [{"Ref" : "RDS"}, "yes"]}
+  },
+
+  "Resources" : {
+
+    "WebServer": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata" : {
+        "Comment1" : "Configure the bootstrap helpers to install the Apache Web Server, PHP and the monitoring scripts",
+        "Comment2" : "Depending on the choosen project type the packages and Apache configuration will be different",
+
+        "AWS::CloudFormation::Init" : {
+          "configSets" : {  
+            "common" : [ "CommonConfig" ],
+            "symfony" : [ { "ConfigSet" : "common" }, "AdditionalSymfonyConfig" ],
+            "drupal" : [ { "ConfigSet" : "common" } , "AdditionalDrupalConfig" ],
+            "default" : [ { "ConfigSet" : "common" } ]
+          },
+
+          "CommonConfig" : {
+            "files" : {
+              "/home/ec2-user/crontab": {
+                "content" : { "Fn::Join" : ["", [
+                  "*/5 * * * * ~/aws-scripts-mon/mon-put-instance-data.pl --aws-iam-role=<<cloud-monitoring-script>> --disk-path=/ --disk-space-avail","\n",
+                  "*/5 * * * * ~/aws-scripts-mon/mon-put-instance-data.pl --aws-iam-role=<<cloud-monitoring-script>> --mem-util","\n"
+                  ]]},
+                "mode" : "000600",
+                "owner" : "ec2-user",
+                "group" : "ec2-user"
+              } 
+            },
+
+            "packages" : {
+              "yum" : {
+                "php"          : [],
+                "php-mysql"    : [], 
+                "php-gd"       : [],
+                "php-intl"     : [],
+                "php-pecl-apc" : [],
+                "php-xml"      : [],
+                "php-mbstring" : [],
+                "git"          : [],
+                "perl-Sys-Syslog" : [],
+                "perl-Switch" : [],
+                "perl-URI" : [],
+                "perl-IO-Compress" : [],
+                "perl-Bundle-LWP" : []
+              }
+            },
+
+            "sources" : {
+              "/home/ec2-user" : "http://ec2-downloads.s3.amazonaws.com/cloudwatch-samples/CloudWatchMonitoringScripts-v1.1.0.zip"
+            },
+
+            "services" : {
+              "sysvinit" : {
+                "httpd" : {
+                  "enabled"       : "true",
+                  "ensureRunning" : "true"
+                }
+              }
+            }
+          },
+
+          "AdditionalDrupalConfig" : {
+            "packages" : {
+              "yum" : {
+                "php-devel"        : [],
+                "cpp"              : [],
+                "gcc-c++"          : []
+              }
+            },
+            "commands" : {
+              "DrushInstallation" : {
+                "command" : "pear channel-discover pear.drush.org && pear install drush/drush"
+              },
+              "UploadprogressInstallation" : {
+                "command" : "pecl install uploadprogress && echo \"extension=uploadprogress.so\" >> /etc/php.ini "
+              }
+            },
+            "files" : {
+              "/etc/httpd/conf.d/myDrupal.conf" : {
+                "content" : { "Fn::Join" : ["", [
+                  "<VirtualHost *:80>\n",
+                  "  ServerName ", { "Ref" : "ServerName" },"\n\n",
+                  "  DocumentRoot /var/www/", { "Ref" : "InstanceTagName" }, "/htdocs\n",
+                  "  <Directory />\n",
+                  "    Options FollowSymLinks\n",
+                  "    AllowOverride None\n",
+                  "  </Directory>\n",
+                  "  <Directory /var/www/", { "Ref" : "InstanceTagName" } ,"/htdocs/>\n",
+                  "    Options -Indexes FollowSymLinks MultiViews\n",
+                  "    AllowOverride All\n",
+                  "    Order allow,deny\n",
+                  "    allow from all\n",
+                  "  </Directory>\n\n",
+                  "  LogLevel warn\n",
+                  "  ErrorLog /var/log/httpd/",{ "Ref" : "InstanceTagName" },".error.log\n",
+                  "  CustomLog /var/log/httpd/",{ "Ref" : "InstanceTagName" },".access.log combined\n",
+                  "</VirtualHost>\n"
+                  ]]},
+                "mode" : "000644",
+                "owner" : "root",
+                "group" : "root"
+              }
+            }
+          },
+
+          "AdditionalSymfonyConfig" : {
+            "files" : {
+              "/etc/httpd/conf.d/mySymfony.conf" : {
+                "content" : { "Fn::Join" : ["", [
+                  "<VirtualHost *:80>\n",
+                  "  ServerName ", { "Ref" : "ServerName" },"\n\n",
+                  "  DocumentRoot /var/www/", { "Ref" : "InstanceTagName" }, "/web\n",
+                  "  <Directory />\n",
+                  "    Options FollowSymLinks\n",
+                  "    AllowOverride None\n",
+                  "  </Directory>\n",
+                  "  <Directory /var/www/", { "Ref" : "InstanceTagName" } ,"/web/>\n",
+                  "    Options -Indexes FollowSymLinks MultiViews\n",
+                  "    AllowOverride All\n",
+                  "    Order allow,deny\n",
+                  "    allow from all\n",
+                  "  </Directory>\n\n",
+                  "  LogLevel warn\n",
+                  "  ErrorLog /var/log/httpd/",{ "Ref" : "InstanceTagName" },".error.log\n",
+                  "  CustomLog /var/log/httpd/",{ "Ref" : "InstanceTagName" },".access.log combined\n",
+                  "</VirtualHost>\n"
+                  ]]},
+                "mode" : "000644",
+                "owner" : "root",
+                "group" : "root"
+              }
+            } 
+          }
+        }
+      },
+      "Properties": {
+        "DisableApiTermination" : "true",
+        "IamInstanceProfile" : "<<cloud-monitoring-script>>",
+        "ImageId"        : { "Ref" : "AWSRegionAMI" },
+        "InstanceType"   : { "Ref" : "InstanceType" },
+        "SecurityGroups" : [ {"Ref" : "WebServerSecurityGroup"} ],
+        "KeyName"        : { "Ref" : "KeyName" },
+        "Tags"           : [ { "Key" : "Name",
+                               "Value" : { "Ref" : "InstanceTagName" }
+                             },
+                             { "Key" : "project",
+                               "Value" : { "Ref" : "InstanceTagProject" }
+                             },
+                             { "Key" : "env",
+                               "Value" : { "Ref" : "InstanceTagEnv" }
+                             },
+                             { "Key" : "monthly_backup",
+                               "Value" : { "Ref" : "InstanceTagMonthlyBackup" }
+                             },
+                             { "Key" : "daily_backup",
+                               "Value" : { "Ref" : "InstanceTagDailyBackup" }
+                             }
+                           ],
+        "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+          "#!/bin/bash -v\n",
+          "yum update -y\n",
+          "yum update -y aws-cfn-bootstrap\n",
+
+          "# Helper function\n",
+          "function error_exit\n",
+          "{\n",
+          "  /opt/aws/bin/cfn-signal -e 1 -r \"$1\" '", { "Ref" : "WaitHandle" }, "'\n",
+          "  exit 1\n",
+          "}\n",
+
+          "# Install LAMP packages and set Apache configuration => Run cfn-init\n",
+          "/opt/aws/bin/cfn-init -c ", { "Ref" : "ProjectType" }," -s ", { "Ref" : "AWS::StackId" }, " -r WebServer ",
+    	  "    --region ", { "Ref" : "AWS::Region" }, " || error_exit 'Failed to run cfn-init'\n",
+
+          "# Setting date.timezone in php.ini \n",
+          "sed -i '/date.timezone =.*/a date.timezone = <<Europe\/London>>' /etc/php.ini\n",
+
+          "# make the monitoring script executable - don't know why they are not - and create crontab \n",
+          "chmod +x /home/ec2-user/aws-scripts-mon/*.pl\n",
+          "crontab -u ec2-user /home/ec2-user/crontab\n",
+          "rm /home/ec2-user/crontab\n",
+
+          "# add file to identify server \n",
+          "touch /home/ec2-user/", { "Ref" : "InstanceTagName" } ,"!\n",
+
+          "# create the directory for the project \n",
+          "mkdir /var/www/", { "Ref" : "InstanceTagName" } , "\n",
+
+          "# reload Apache to take into account the changes in the config \n",
+          "service httpd reload\n",
+
+          "# All is well so signal success\n",
+          "/opt/aws/bin/cfn-signal -e 0 -r \"LAMP Stack setup complete\" '", { "Ref" : "WaitHandle" }, "'\n"
+        ]]}}
+      }
+    },
+
+    "WaitHandle" : {
+      "Type" : "AWS::CloudFormation::WaitConditionHandle"
+    },
+
+    "WaitCondition" : {
+      "Type" : "AWS::CloudFormation::WaitCondition",
+      "DependsOn" : "WebServer",
+      "Properties" : {
+        "Handle" : {"Ref" : "WaitHandle"},
+        "Timeout" : "600"
+      }
+    },
+
+    "WebServerSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Enable HTTP access via port 80",
+        "SecurityGroupIngress" : [
+          {"IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : { "Ref" : "ExternalIP"}},
+          {"IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : { "Ref" : "ExternalIP"}}
+        ]
+      }
+    },
+
+    "CPUAlarmWebServer" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, " CPU Utilization"]]},
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "300",
+        "EvaluationPeriods": "2",
+        "Threshold": "70",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "InstanceId",
+                         "Value": { "Ref": "WebServer" } }],
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold"
+      }
+    },    
+
+    "StatusCheckAlarmWebServer" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, " High Status Check Failed Any"]]},
+        "MetricName": "StatusCheckFailed",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Maximum",
+        "Period": "300",
+        "EvaluationPeriods": "2",
+        "Threshold": "1",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "InstanceId",
+                         "Value": { "Ref": "WebServer" } }],
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold"
+      }
+    },   
+
+    "MemoryAlarmWebServer" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, " Memory Utilization"]]},
+        "MetricName": "MemoryUtilization",
+        "Namespace": "System/Linux",
+        "Statistic": "Average",
+        "Period": "300",
+        "EvaluationPeriods": "4",
+        "Threshold": "85",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "InstanceId",
+                         "Value": { "Ref": "WebServer" } }],
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold"
+      }
+    },    
+
+    "DiskSpaceAlarmWebServer" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, " Disk Space Available"]]},
+        "MetricName": "DiskSpaceAvailable",
+        "Namespace": "System/Linux",
+        "Statistic": "Average",
+        "Period": "300",
+        "EvaluationPeriods": "48",
+        "Threshold": "1",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "InstanceId", "Value": { "Ref": "WebServer" } },
+                       { "Name": "Filesystem", "Value": "/dev/xvda1" },
+                       { "Name": "MountPath", "Value": "/"} ],
+        "ComparisonOperator": "LessThanOrEqualToThreshold"
+      }
+    },
+
+    "DBSecurityGroup": {
+      "Type": "AWS::RDS::DBSecurityGroup",
+      "Condition" : "CreateRDSInstance",
+      "Properties": {
+        "GroupDescription": "Grant database access to web server",
+        "DBSecurityGroupIngress": [
+          {"EC2SecurityGroupName": { "Ref": "WebServerSecurityGroup" }},
+          {"CIDRIP" : { "Ref" : "ExternalIP" }}
+        ]
+      }
+    },
+
+    "RDSInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "Condition" : "CreateRDSInstance",
+      "Properties": {
+        "Engine" : "MySQL",
+        "MultiAZ" : "false",
+        "MasterUsername": "root",
+        "MasterUserPassword": { "Ref" : "RDSrootPassword" },
+        "DBInstanceClass": "db.t1.micro",
+        "DBSecurityGroups": [ { "Ref" : "DBSecurityGroup" } ],
+        "AllocatedStorage": "5"
+      }
+    },
+
+    "CPUAlarmDB" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Condition" : "CreateRDSInstance",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, "DB CPU Utilization"]]},
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/RDS",
+        "Statistic": "Average",
+        "Period": "300",
+        "EvaluationPeriods": "2",
+        "Threshold": "70",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "DBInstanceIdentifier",
+                         "Value": { "Ref": "RDSInstance" } }],
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold"
+      }
+    },   
+
+    "LowFreeableSpaceAlarmDB" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Condition" : "CreateRDSInstance",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, " DB Low Freeable Space§"]]},
+        "MetricName": "FreeStorageSpace",
+        "Namespace": "AWS/RDS",
+        "Statistic": "Average",
+        "Period": "3600",
+        "EvaluationPeriods": "4",
+        "Threshold": "1048576000",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "DBInstanceIdentifier",
+                         "Value": { "Ref": "RDSInstance" } }],
+        "ComparisonOperator": "LessThanOrEqualToThreshold"
+      }
+    }
+  },
+
+  "Outputs" : {
+    "WebsiteURL" : {
+      "Value" : { "Fn::Join" : ["", ["http://", { "Fn::GetAtt" : [ "WebServer", "PublicDnsName" ]}]] },
+      "Description" : "URL for newly created LAMP stack"
+    }
+  }
+}
