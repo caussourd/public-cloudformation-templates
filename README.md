@@ -55,7 +55,7 @@ It creates these resources:
    The EC2 instance is authorized  
    The CIDR (parameter ExternalIP) is authorized
 
-- 2 CloudWatch alarms for the RDS instance
+- 2 CloudWatch alarms for the RDS instance (optional)
 
    CPU Utilization  
    Freeable Space
