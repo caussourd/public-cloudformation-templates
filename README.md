@@ -28,12 +28,12 @@ It creates these resources:
    php.ini : set the date.timezone  
    Monitoring : install the Amazon monitoring scripts and set the cron job to send Disk space and Memory data to CloudWatch
 
-- 1 Security group for the instance
+- 1 Security group for the EC2 instance
 
    Port 22 : open only to CIDR in parameter (ExternalIP)  
    Port 80 : open only to CIDR in parameter (ExternalIP)
 
-- 4 CloudWatch alarms for the instance
+- 4 CloudWatch alarms for the EC2 instance
 
 	Disk space available  
 	Memory utilization  
@@ -51,8 +51,13 @@ It creates these resources:
 
 - 1 Security group for the RDS DB instance (optional)
 
-	The EC2 instance is authorized  
-	The CIDR (parameter ExternalIP) is authorized
+   The EC2 instance is authorized  
+   The CIDR (parameter ExternalIP) is authorized
+
+- 2 CloudWatch alarms for the RDS instance
+
+   CPU Utilization  
+   Freeable Space
 
 
 ### What this template doesn't do
