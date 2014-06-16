@@ -283,6 +283,8 @@
 
           "# Setting date.timezone in php.ini \n",
           "sed -i '/date.timezone =.*/a date.timezone = <<Europe\/London>>' /etc/php.ini\n",
+          "# Setting error_reporting in php.ini \n",
+          "sed -i 's/error_reporting = E_ALL \\& ~E_DEPRECATED/error_reporting = E_ALL \\& ~E_DEPRECATED \\& ~E_NOTICE/g' /etc/php.ini\n",
 
           "# make the monitoring script executable - don't know why they are not - and create crontab \n",
           "chmod +x /home/ec2-user/aws-scripts-mon/*.pl\n",
@@ -419,7 +421,10 @@
         "MasterUserPassword": { "Ref" : "RDSrootPassword" },
         "DBInstanceClass": "db.t1.micro",
         "DBSecurityGroups": [ { "Ref" : "DBSecurityGroup" } ],
-        "AllocatedStorage": "5"
+        "AllocatedStorage": "5",
+        "Tags" : [ { "Key" : "project",
+                     "Value" : { "Ref" : "InstanceTagProject" }
+                   }]
       }
     },
 
