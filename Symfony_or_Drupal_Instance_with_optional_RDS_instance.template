@@ -22,15 +22,15 @@
     "InstanceType" : {
       "Description" : "WebServer EC2 instance type",
       "Type" : "String",
-      "Default" : "m1.small",
-      "AllowedValues" : [ "t1.micro","m1.small","m3.medium","m3.large","m3.xlarge", "m3.2xlarge", "c3.large","c3.xlarge","c3.2xlarge","r3.large","r3.xlarge", "r3.2xlarge"],
+      "Default" : "t2.small",
+      "AllowedValues" : [ "t2.micro","t2.small","t2.medium","m3.medium","m3.large","m3.xlarge", "m3.2xlarge", "c3.large","c3.xlarge","c3.2xlarge","r3.large","r3.xlarge", "r3.2xlarge"],
       "ConstraintDescription" : "must be a valid EC2 instance type."
     },
 
     "AWSRegionAMI" : {
-      "Description" : "AMI - By default: Amazon Linux AMI 2014.04 64-bit",
+      "Description" : "AMI - By default: Amazon Linux AMI HVM 2014.03 64-bit",
       "Type" : "String",
-      "Default"      : "<<ami-2918e35e>>",
+      "Default"      : "ami-892fe1fe",
       "AllowedPattern" : "[a-z0-9-]*"
     },
 
@@ -54,6 +54,13 @@
       "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
     },
 
+    "SubnetId" : {
+      "Description" : "VPC SubnetId",
+      "Type" : "String",
+      "Default"      : "<<subnet-XXXXXX>>",
+      "AllowedPattern" : "[a-z0-9-]*"
+    },
+
     "ProjectType" : {
       "Description" : "Project type - Example: drupal / symfony",
       "Type" : "String", 
@@ -63,17 +70,17 @@
     },
 
     "ServerName" : {
-      "Description" : "Hostname to access website - Example: www.menss.co.uk",
+      "Description" : "Hostname to access website - Example: www.example.com",
       "Type" : "String" 
     },
 
     "InstanceTagName" : {
-      "Description" : "Instance Name tag - Example: LIU-cache",
+      "Description" : "Instance Name tag - Example: PR-cache",
       "Type" : "String" 
     },
 
     "InstanceTagProject" : {
-      "Description" : "Instance Project tag - Example: LIU",
+      "Description" : "Instance Project tag - Example: PR",
       "Type" : "String" 
     },
 
@@ -145,6 +152,7 @@
                 "php-pecl-apc" : [],
                 "php-xml"      : [],
                 "php-mbstring" : [],
+                "svn"          : [],
                 "git"          : [],
                 "perl-Sys-Syslog" : [],
                 "perl-Switch" : [],
@@ -247,7 +255,8 @@
         "IamInstanceProfile" : "<<cloud-monitoring-script>>",
         "ImageId"        : { "Ref" : "AWSRegionAMI" },
         "InstanceType"   : { "Ref" : "InstanceType" },
-        "SecurityGroups" : [ {"Ref" : "WebServerSecurityGroup"} ],
+        "SecurityGroupIds" : [ {"Ref" : "WebServerSecurityGroup"} ],
+        "SubnetId"       : { "Ref" : "SubnetId" },
         "KeyName"        : { "Ref" : "KeyName" },
         "Tags"           : [ { "Key" : "Name",
                                "Value" : { "Ref" : "InstanceTagName" }
@@ -322,6 +331,7 @@
     "WebServerSecurityGroup" : {
       "Type" : "AWS::EC2::SecurityGroup",
       "Properties" : {
+        "VpcId" : "<<vpc-XXXXXXXX>>",
         "GroupDescription" : "Enable HTTP access via port 80",
         "SecurityGroupIngress" : [
           {"IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : { "Ref" : "ExternalIP"}},
@@ -400,13 +410,13 @@
     },
 
     "DBSecurityGroup": {
-      "Type": "AWS::RDS::DBSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroup",
       "Condition" : "CreateRDSInstance",
       "Properties": {
+        "VpcId" : "<<vpc-XXXXXXXX>>",
         "GroupDescription": "Grant database access to web server",
-        "DBSecurityGroupIngress": [
-          {"EC2SecurityGroupName": { "Ref": "WebServerSecurityGroup" }},
-          {"CIDRIP" : { "Ref" : "ExternalIP" }}
+        "SecurityGroupIngress": [
+          {"IpProtocol" : "tcp", "FromPort" : "3306", "ToPort" : "3306", "SourceSecurityGroupId" : { "Ref" : "WebServerSecurityGroup"} }
         ]
       }
     },
@@ -419,8 +429,9 @@
         "MultiAZ" : "false",
         "MasterUsername": "root",
         "MasterUserPassword": { "Ref" : "RDSrootPassword" },
-        "DBInstanceClass": "db.t1.micro",
-        "DBSecurityGroups": [ { "Ref" : "DBSecurityGroup" } ],
+        "DBInstanceClass": "db.t2.micro",
+        "DBSubnetGroupName" : "db-subnet-group",
+        "VPCSecurityGroups": [ { "Ref" : "DBSecurityGroup" } ],
         "AllocatedStorage": "5",
         "Tags" : [ { "Key" : "project",
                      "Value" : { "Ref" : "InstanceTagProject" }
