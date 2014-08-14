@@ -28,6 +28,7 @@ It creates these resources:
    Web server : Apache is configured and we make sure it's running  
    php.ini : set the date.timezone  
    Monitoring : install the Amazon monitoring scripts and set the cron job to send Disk space and Memory data to CloudWatch
+   Subnet (for VPC): in parameter
 
 - 1 Security group for the EC2 instance
 
@@ -53,7 +54,6 @@ It creates these resources:
 - 1 Security group for the RDS DB instance (optional)
 
    The EC2 instance is authorized  
-   The CIDR (parameter ExternalIP) is authorized
 
 - 2 CloudWatch alarms for the RDS instance (optional)
 
@@ -74,4 +74,6 @@ It creates these resources:
 - It doesn't create the SNS topic (used for CloudWatch alarms)
 
 - It doesn't check the length of the master password for the DB instance
+
+- It doesn't create the VPC
 
