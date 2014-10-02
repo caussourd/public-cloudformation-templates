@@ -1,0 +1,49 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "Create a new empty volume or one based on a snapshot depending on parameter. If parameter empty, create empty volume of 20GB",
+
+
+  "Parameters" : {
+  	"SnapshotId" : {
+  		"Description" : "EC2 Snapshot ID",
+  		"Type" : "String"
+  	}
+  },
+
+ 
+  "Conditions" : {
+  	"NotUseSnapshot" : {"Fn::Equals" : [{"Ref" : "SnapshotId"}, ""]},
+    "UseSnapshot" : {"Fn::Not" : [{"Fn::Equals" : [{"Ref" : "SnapshotId"}, ""]}]}
+  }, 
+
+  "Resources" : {
+	"EmptyDataVolume" : {
+	  "Type" : "AWS::EC2::Volume",
+	  "Condition" : "NotUseSnapshot",
+	  "Properties" : {
+	  	"Size" : "20",
+	    "VolumeType" : "standard",
+	    "AvailabilityZone" : "eu-west-1b",
+	    "Tags" : [
+	      {"Key" : "Role", "Value": "data" }
+	    ]
+	  },
+	  "DeletionPolicy" : "Delete"
+	},
+
+	"SnapshotDataVolume" : {
+	  "Type" : "AWS::EC2::Volume",
+	  "Condition" : "UseSnapshot",
+	  "Properties" : {
+	  	"SnapshotId" : {"Ref" : "SnapshotId"},
+	    "VolumeType" : "standard",
+	    "AvailabilityZone" : "eu-west-1b",
+	    "Tags" : [
+	      {"Key" : "Role", "Value": "data" }
+	    ]
+	  },
+	  "DeletionPolicy" : "Delete"
+	}
+  }
+}
