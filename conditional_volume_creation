@@ -5,7 +5,7 @@
 
 
   "Parameters" : {
-  	"SnapshotId" : {
+  	"InputSnapshotId" : {
   		"Description" : "EC2 Snapshot ID",
   		"Type" : "String"
   	}
@@ -13,30 +13,27 @@
 
  
   "Conditions" : {
-  	"NotUseSnapshot" : {"Fn::Equals" : [{"Ref" : "SnapshotId"}, ""]},
-    "UseSnapshot" : {"Fn::Not" : [{"Fn::Equals" : [{"Ref" : "SnapshotId"}, ""]}]}
+  	"NotUseSnapshot" : {"Fn::Equals" : [{"Ref" : "InputSnapshotId"}, ""]}
   }, 
 
   "Resources" : {
-	"EmptyDataVolume" : {
+	"DataVolume" : {
 	  "Type" : "AWS::EC2::Volume",
-	  "Condition" : "NotUseSnapshot",
 	  "Properties" : {
-	  	"Size" : "20",
-	    "VolumeType" : "standard",
-	    "AvailabilityZone" : "eu-west-1b",
-	    "Tags" : [
-	      {"Key" : "Role", "Value": "data" }
-	    ]
-	  },
-	  "DeletionPolicy" : "Delete"
-	},
-
-	"SnapshotDataVolume" : {
-	  "Type" : "AWS::EC2::Volume",
-	  "Condition" : "UseSnapshot",
-	  "Properties" : {
-	  	"SnapshotId" : {"Ref" : "SnapshotId"},
+	  	"Size" : {
+		  	"Fn::If" : [
+		        "NotUseSnapshot",
+		        "20",
+		        {"Ref" : "AWS::NoValue"}
+	        ]
+	    },
+	    "SnapshotId" : {
+	    	"Fn::If" : [
+		        "NotUseSnapshot",
+		        {"Ref" : "AWS::NoValue"},
+		        {"Ref" : "InputSnapshotId"}
+	        ]
+	    },
 	    "VolumeType" : "standard",
 	    "AvailabilityZone" : "eu-west-1b",
 	    "Tags" : [
