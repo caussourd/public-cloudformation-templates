@@ -11,8 +11,9 @@ The template won't work if you leave these symbols.
 This template automates the creation of an Apache SOLR instance. 
 
 It creates an EC2 instance in a VPC and set Cloudwatch alarms (CPU, Status, Memory, Disk space).
+Solr 4.10.2 is installed and configured on the instance. 
 
-It also configures the core to be used with a Drupal website. To use with another type of websites, just remove or replace lines 209 and 217 to adapt to your own configuration.
+It also configures the core to be used with a Drupal website. To use with another type of website, just remove or replace lines 209 and 217 with your own configuration.
 
 ### What this template doesn't do
 
@@ -25,7 +26,7 @@ It also configures the core to be used with a Drupal website. To use with anothe
 
 ## conditional_volume_creation.template
 
-Use conditions to create a volume from on a snapshot or from scratch depending on the parameter value. This template has been created to answer this StackOverflow question: http://stackoverflow.com/questions/26131585/aws-cloudformation-optional-line
+Use conditions to create a volume from a snapshot or from scratch depending on the parameter. This template has been created to answer this StackOverflow question: http://stackoverflow.com/questions/26131585/aws-cloudformation-optional-line
 
 
 ## Symfony_or_Drupal_Instance_with_optional_RDS_instance.template
