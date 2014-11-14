@@ -1,14 +1,36 @@
+### IMPORTANT INFORMATION
+
+These templates create AWS resources. You will be billed for the AWS resources used if you create a stack from these templates.
+
+These templates have been created based on my needs and have to be customized for your usage. 
+The elements I recommend to change are identified by these symbols: `<< >>` in the template.
+The template won't work if you leave these symbols. 
+
+## SOLR_VPC.template
+
+This template automates the creation of an Apache SOLR instance. 
+
+It creates an EC2 instance in a VPC and set Cloudwatch alarms (CPU, Status, Memory, Disk space).
+
+It also configures the core to be used with a Drupal website. To use with another type of websites, just remove or replace lines 209 and 217 to adapt to your own configuration.
+
+### What this template doesn't do
+
+- It doesn't create the VPC. Replace `<<vpc-XXXXXXXX>>` by your VPC id. 
+
+- It doesn't create the IAM role for the monitoring. Replace `<<cloud-monitoring-script>>` by the name of your IAM role
+
+- It doesn't create the SNS topic (used for CloudWatch alarms). Replace `<<arn:aws:sns:your_region:your_id:your_topic>>` by your SNS topic
+
+
+## conditional_volume_creation.template
+
+Use conditions to create a volume from on a snapshot or from scratch depending on the parameter value. This template has been created to answer this StackOverflow question: http://stackoverflow.com/questions/26131585/aws-cloudformation-optional-line
+
+
 ## Symfony_or_Drupal_Instance_with_optional_RDS_instance.template
 
 To automate the creation of AWS resources for Symfony or Drupal websites
-
-### IMPORTANT INFORMATION
-
-This template creates an Amazon EC2 instance and an Amazon RDS DB instance. You will be billed for the AWS resources used if you create a stack from this template.
-
-This template has been created based on my needs and has to be customized for your usage. 
-The elements I recommend to change are identified by these symbols: << >> in the template.
-The template won't work if you leave these symbols.  
 
 ### What this template does
 

@@ -1,0 +1,353 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "Creation of an Apache SOLR server (EC2 instance) including CloudWatch monitoring of the instance",
+  
+  "Parameters" : {
+
+    "InstanceType" : {
+      "Description" : "EC2 instance type",
+      "Type" : "String",
+      "Default" : "t2.small",
+      "AllowedValues" : [ "t2.micro","t2.small","t2.medium","m3.medium","m3.large","m3.xlarge", "m3.2xlarge", "c3.large","c3.xlarge","c3.2xlarge","r3.large","r3.xlarge", "r3.2xlarge"],
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+
+    "AWSRegionAMI" : {
+      "Description" : "AMI - By default: Amazon Linux AMI HVM 2014.09 64-bit",
+      "Type" : "String",
+      "Default"      : "ami-6e7bd919",
+      "AllowedPattern" : "[a-z0-9-]*"
+    },
+
+    "KeyName" : {
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+      "Type" : "String",
+      "Default" : "<<your_key_pair_name>>",
+      "MinLength": "1",
+      "MaxLength": "64",
+      "AllowedPattern" : "[-_ a-zA-Z0-9]*",
+      "ConstraintDescription" : "can contain only alphanumeric characters, spaces, dashes and underscores."
+    },
+
+    "ExternalIP" : {
+      "Description" : "The IP address range that can be used to SSH to the EC2 instances",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "<<XX.XX.XX.XX/32>>",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+
+    "AppSecurityGroupId" : {
+      "Description" : "The Security Group ID of the EC2 instance that will use this Solr instance",
+      "Type" : "String",
+      "AllowedPattern" : "[a-z0-9-]*"
+    },
+
+    "SubnetId" : {
+      "Description" : "VPC SubnetId",
+      "Type" : "String",
+      "Default" : "<<subnet-XXXXXX>>",
+      "AllowedPattern" : "[a-z0-9-]*"
+    },
+
+    "InstanceTagName" : {
+      "Description" : "Instance Name tag - Example: PR-SOLR",
+      "Type" : "String", 
+      "Default" : "Solr"
+    },
+
+    "SolrCollectionName" : {
+      "Description" : "Name you want to give to the Solr core",
+      "Type" : "String",
+      "Default" : "myproject"
+    }
+  },
+
+  "Resources" : {
+
+    "Solr": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata" : {
+        "Comment1" : "Configure the bootstrap helpers to install the Apache Solr and the monitoring scripts",
+
+        "AWS::CloudFormation::Init" : {
+          "configSets" : {
+            "full_config" : [ "cfn_config", "system_config", "solr_config", "drupal_config" ]
+          },
+
+          "cfn_config" : {
+            "files" : {
+              "/etc/cfn/cfn-hup.conf" : {
+                "content" : { "Fn::Join" : ["", [
+                  "[main]\n",
+                  "stack=", { "Ref" : "AWS::StackId" }, "\n",
+                  "region=", { "Ref" : "AWS::Region" }, "\n"
+                ]]},
+                "mode"    : "000400",
+                "owner"   : "root",
+                "group"   : "root"
+              },
+
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf" : {
+                "content": { "Fn::Join" : ["", [
+                  "[cfn-auto-reloader-hook]\n",
+                  "triggers=post.update\n",
+                  "path=Resources.Solr.Metadata.AWS::CloudFormation::Init\n",
+                  "action=/opt/aws/bin/cfn-init -v ",
+                  "         --stack ", { "Ref" : "AWS::StackName" },
+                  "         --resource Solr ",
+                  "         --configsets full_config ",
+                  "         --region ", { "Ref" : "AWS::Region" }, "\n",
+                  "runas=root\n"
+                ]]}
+              }
+            },
+
+            "services" : {
+              "sysvinit" : {  
+                "cfn-hup" : { "enabled" : "true", "ensureRunning" : "true",
+                              "files" : ["/etc/cfn/cfn-hup.conf", "/etc/cfn/hooks.d/cfn-auto-reloader.conf"]}
+              }
+            }
+          },
+          
+          "system_config" : {
+            "packages" : {
+              "yum" : {
+                "perl-Sys-Syslog" : [],
+                "perl-Switch" : [],
+                "perl-URI" : [],
+                "perl-IO-Compress" : [],
+                "perl-Bundle-LWP" : []
+              }
+            },
+
+            "sources" : {
+              "/home/ec2-user" : "http://ec2-downloads.s3.amazonaws.com/cloudwatch-samples/CloudWatchMonitoringScripts-v1.1.0.zip"
+            },
+
+            "files" : {
+              "/home/ec2-user/crontab": {
+                "content" : { "Fn::Join" : ["", [
+                  "*/5 * * * * ~/aws-scripts-mon/mon-put-instance-data.pl --aws-iam-role=<<cloud-monitoring-script>> --disk-path=/ --disk-space-avail","\n",
+                  "*/5 * * * * ~/aws-scripts-mon/mon-put-instance-data.pl --aws-iam-role=<<cloud-monitoring-script>> --mem-util","\n"
+                  ]]},
+                "mode" : "000600",
+                "owner" : "ec2-user",
+                "group" : "ec2-user"
+              } 
+            },
+
+            "commands" : {
+              "01_UpdateSystem" : {
+                "command" : "yum update -y"
+              },
+              "02_MonitoringCron" : {
+                "command" : "chmod +x /home/ec2-user/aws-scripts-mon/*.pl && crontab -u ec2-user /home/ec2-user/crontab && rm /home/ec2-user/crontab"
+              },
+              "03_IdentifySystem" : {
+                "command" : { "Fn::Join" : ["", ["touch /home/ec2-user/", { "Ref" : "InstanceTagName" } ,"!"]] }
+              }
+            } 
+          },
+          
+          "solr_config" : {
+            "users" : {
+              "solr" : {
+                "homeDir" : "/opt/solr"
+              }
+            },
+
+            "sources" : {
+              "/home/ec2-user" : "http://mirror.gopotato.co.uk/apache/lucene/solr/4.10.2/solr-4.10.2.zip"
+            },
+
+            "files" : {
+              "/etc/default/jetty": {
+                "content" : { "Fn::Join" : ["", [
+                  "NO_START=0 # Start on boot","\n",
+                  "JAVA_OPTIONS=\"-Dsolr.solr.home=/opt/solr/solr $JAVA_OPTIONS\"","\n",
+                  "JAVA_HOME=/usr/lib/jvm/jre","\n",
+                  "JETTY_HOME=/opt/solr","\n",
+                  "JETTY_USER=solr","\n",
+                  "JETTY_LOGS=/opt/solr/logs"
+                ]]}
+              },
+
+              "/etc/init.d/jetty": {
+                "source" : "http://dev.eclipse.org/svnroot/rt/org.eclipse.jetty/jetty/trunk/jetty-distribution/src/main/resources/bin/jetty.sh",
+                "mode" : "000755"
+              }     
+            },
+
+            "commands" : {
+              "01_SolrInstallation" : {
+                "command" : "cp -r /home/ec2-user/solr-4.10.2/example /opt/solr"
+              }, 
+              "02_SolrPermissions" : {
+                "command" : "chown -R solr:solr /opt/solr"
+              },
+              "03_SolrShell" : {
+                "command" : "usermod -s /bin/bash solr"
+              }
+            },
+
+            "services" : {
+              "sysvinit" : {
+                "jetty" : {
+                  "enabled"       : "true"
+                }
+              }
+            }
+          },
+
+          "drupal_config" : {
+            "sources" : {
+              "/home/ec2-user" : "http://ftp.drupal.org/files/projects/apachesolr-7.x-1.7.tar.gz"
+            },
+
+            "commands" : {
+              "01_SolrCoreConfiguration" : {
+                "command" : { "Fn::Join" : ["", ["mv /opt/solr/solr/collection1 /opt/solr/solr/", {"Ref" : "SolrCollectionName"}, " && sed -i 's/collection1/", {"Ref" : "SolrCollectionName"}, "/' /opt/solr/solr/", {"Ref" : "SolrCollectionName"}, "/core.properties && rm -rf /opt/solr/solr/", {"Ref" : "SolrCollectionName"}, "/data"]]} 
+              },
+              "02_SolrDrupalConfiguration" : {
+                "command" : { "Fn::Join" : ["", ["mv -f /home/ec2-user/apachesolr/solr-conf/solr-4.x/* /opt/solr/solr/", {"Ref" : "SolrCollectionName"}, "/conf"]]}
+              },
+              "03_SolrPermissions" : {
+                "command" : "chown -R solr:solr /opt/solr"
+              }
+            }
+          }
+
+        }
+      },
+      "Properties": {
+        "IamInstanceProfile" : "<<cloud-monitoring-script>>",
+        "ImageId"        : { "Ref" : "AWSRegionAMI" },
+        "InstanceType"   : { "Ref" : "InstanceType" },
+        "SecurityGroupIds" : [ {"Ref" : "SolrSecurityGroup"} ],
+        "SubnetId"       : { "Ref" : "SubnetId" },
+        "KeyName"        : { "Ref" : "KeyName" },
+        "Tags"           : [ { "Key" : "Name",
+                               "Value" : { "Ref" : "InstanceTagName" }
+                             }
+                           ],
+        "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+          "#!/bin/bash -xe\n",
+          "yum update -y aws-cfn-bootstrap\n",
+
+          "/opt/aws/bin/cfn-init -v ",
+          "         --stack ", { "Ref" : "AWS::StackId" },
+          "         --resource Solr ",
+          "         --configsets full_config ",
+          "         --region ", { "Ref" : "AWS::Region" }, "\n",
+
+          "/opt/aws/bin/cfn-signal -e $? ",
+          "         --stack ", { "Ref" : "AWS::StackId" },
+          "         --resource Solr ",
+          "         --region ", { "Ref" : "AWS::Region" }, "\n",
+
+          "# starting jetty \n",
+          "service jetty start \n"
+        ]]}}        
+      },
+      "CreationPolicy" : {
+        "ResourceSignal" : {
+          "Timeout" : "PT10M"
+        }
+      }
+    },
+
+    "SolrSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "VpcId" : "<<vpc-XXXXXXXX>>",
+        "GroupDescription" : "Enable HTTP access via port 8983",
+        "SecurityGroupIngress" : [
+          {"IpProtocol" : "tcp", "FromPort" : "8983", "ToPort" : "8983", "CidrIp" : { "Ref" : "ExternalIP"}},
+          {"IpProtocol" : "tcp", "FromPort" : "8983", "ToPort" : "8983", "SourceSecurityGroupId" : { "Ref" : "AppSecurityGroupId" } },
+          {"IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : { "Ref" : "ExternalIP"}}
+        ]
+      }
+    },
+
+    "CPUAlarmSolr" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, " CPU Utilization"]]},
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "300",
+        "EvaluationPeriods": "2",
+        "Threshold": "70",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "InstanceId",
+                         "Value": { "Ref": "Solr" } }],
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold"
+      }
+    },    
+
+    "StatusCheckAlarmSolr" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, " High Status Check Failed Any"]]},
+        "MetricName": "StatusCheckFailed",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Maximum",
+        "Period": "300",
+        "EvaluationPeriods": "2",
+        "Threshold": "1",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "InstanceId",
+                         "Value": { "Ref": "Solr" } }],
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold"
+      }
+    },   
+
+    "MemoryAlarmSolr" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, " Memory Utilization"]]},
+        "MetricName": "MemoryUtilization",
+        "Namespace": "System/Linux",
+        "Statistic": "Average",
+        "Period": "300",
+        "EvaluationPeriods": "4",
+        "Threshold": "85",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "InstanceId",
+                         "Value": { "Ref": "Solr" } }],
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold"
+      }
+    },    
+
+    "DiskSpaceAlarmSolr" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "AlarmDescription": { "Fn::Join" : ["", [{ "Ref" : "InstanceTagName" }, " Disk Space Available"]]},
+        "MetricName": "DiskSpaceAvailable",
+        "Namespace": "System/Linux",
+        "Statistic": "Average",
+        "Period": "300",
+        "EvaluationPeriods": "48",
+        "Threshold": "1",
+        "AlarmActions": [ "<<arn:aws:sns:your_region:your_id:your_topic>>" ],
+        "Dimensions": [{ "Name": "InstanceId", "Value": { "Ref": "Solr" } },
+                       { "Name": "Filesystem", "Value": "/dev/xvda1" },
+                       { "Name": "MountPath", "Value": "/"} ],
+        "ComparisonOperator": "LessThanOrEqualToThreshold"
+      }
+    }
+  },
+
+  "Outputs" : {
+    "SolrURL" : {
+      "Value" : { "Fn::Join" : ["", ["http://", { "Fn::GetAtt" : [ "Solr", "PublicIp" ]}, ":8983/solr"]] },
+      "Description" : "URL for newly created Solr server"
+    }
+  }
+}
